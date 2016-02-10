@@ -42,6 +42,8 @@ class MainWin(QMainWindow):
         self.setupEditActions()
         self.setupTextActions()
         self.setupRunActions()
+        self.initializeSettings()
+        self.populateRunSettings()  # FIXME put in initializeSettings()?
         
         settingsMenu = QMenu('Settings', self)
         self.menuBar().addMenu(settingsMenu)
@@ -68,8 +70,8 @@ class MainWin(QMainWindow):
 
         self.loadSrc(fileName)
         self.loadLog(logName)
-        if logName and (-1 == self.comboLogFile.findText(logName)):
-            self.comboLogFile.addItem(logName)
+        #if logName and (-1 == self.comboLogFile.findText(logName)):
+            #self.comboLogFile.addItem(logName)
 
         self.logPane.setFocus()
         self.fontChanged(self.textPane.font())
@@ -93,7 +95,7 @@ class MainWin(QMainWindow):
         QApplication.clipboard().dataChanged.connect(self.clipboardDataChanged)
         
         self.actionRun.triggered.connect(self.scannoCheck)       
-        self.logPane.cursorPositionChanged.connect(self.logCursorPosChanged)
+        self.logPane.lineMatchChanged.connect(self.logLineMatchChanged)
 
     def closeEvent(self, e):
         if self.maybeSave():
@@ -207,22 +209,21 @@ class MainWin(QMainWindow):
         self.comboScannoFile.setObjectName("comboScannoFile")
         tb.addWidget(self.comboScannoFile)
         self.comboScannoFile.setEditable(True)
-        settings = QSettings(self)
-        ppscannos = settings.value('ppscannos', type=str)
-        scannoFiles = getRCFilesForDir(os.path.dirname(ppscannos))       
-        if scannoFiles:
-            for f in scannoFiles:
-                self.comboScannoFile.addItem(f)
-        defaultScanno = settings.value('defaultScannoFile', type=str)
-        if defaultScanno:
-            idx = self.comboScannoFile.findText(defaultScanno)
-            self.comboScannoFile.setCurrentIndex(idx)
         
         self.comboLogFile= QComboBox(tb)
         self.comboLogFile.setObjectName("comboLogFile")
         self.comboLogFile.setEditable(True)
         tb.addWidget(self.comboLogFile)
-        
+    
+    def populateRunSettings(self):
+        for f in self.scannoFiles():
+            self.comboScannoFile.addItem(f)
+        if self.defaultScannoFile:
+            idx = self.comboScannoFile.findText(self.defaultScannoFile)
+            self.comboScannoFile.setCurrentIndex(idx)
+
+        self.comboLogFile.addItem('plog.txt')
+
     def loadSrc(self, src):
         if src:
             if not self.textPane.load(src):
@@ -234,11 +235,12 @@ class MainWin(QMainWindow):
         if log:
             if not self.logPane.load(log):
                 return False
+            self.comboLogFile.clear()
+            self.comboLogFile.addItem(log)
         else:
-            log = 'No log file loaded.'
             self.logPane.clear()
             self.logPane.setEnabled(False)
-        self.logBox.setTitle(log)
+        self.logBox.setTitle('No log file loaded.')
         return True
         
     def maybeSave(self):
@@ -310,32 +312,35 @@ class MainWin(QMainWindow):
         self.setCurrentFileName(fn)
         return self.fileSave()
 
-    # TODO implementation should be in TextPane and LogPane. MainWin should only handle the signal/slot connection.
-    def logCursorPosChanged(self):
-        cursor = self.logPane.textCursor()
-        cursor.select(QTextCursor.LineUnderCursor)
-        logline = cursor.selectedText()
-        match = self.logPane.pattern.search(logline)
-        if not match:
-            cursor.clearSelection()
-            cursor.movePosition(QTextCursor.StartOfLine)
-            self.logPane.setTextCursor(cursor)
-            #print('no match')
-            return
-        #print('matched:', match.group(0))
-        self.logPane.setTextCursor(cursor)
-        numstr = match.group(1)
-        linenum = int(numstr)
-        colstr = match.group(2)
-        col = int(colstr) - 1  # 1-based in ppscanno output
-        s = match.group(3)  # scanno match
-        cursor = self.textPane.textCursor()
-        cursor.clearSelection()
-        cursor.movePosition(QTextCursor.Start)
-        cursor.movePosition(QTextCursor.Down, QTextCursor.MoveAnchor, linenum-1)
-        cursor.movePosition(QTextCursor.Right, QTextCursor.MoveAnchor, col)
-        cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor, len(s))  # create the selection
-        self.textPane.setTextCursor(cursor)
+    def logLineMatchChanged(self):
+        #cursor = self.logPane.textCursor()
+        #cursor.select(QTextCursor.LineUnderCursor)
+        #logline = cursor.selectedText()
+        #match = self.logPane.pattern.search(logline)
+        #if not match:
+            #cursor.clearSelection()
+            #cursor.movePosition(QTextCursor.StartOfLine)
+            #self.logPane.setTextCursor(cursor)
+            ##print('no match')
+            #return
+        ##print('matched:', match.group(0))
+        #self.logPane.setTextCursor(cursor)
+        #numstr = match.group(1)
+        #linenum = int(numstr)
+        #colstr = match.group(2)
+        #col = int(colstr) - 1  # 1-based in ppscanno output
+        #s = match.group(3)  # scanno match
+        linenum = self.logPane.srcLineNum()
+        col = self.logPane.srcColNum()
+        s = self.logPane.srcScanno()
+        self.textPane.setSelection(linenum, col, len(s))
+        #cursor = self.textPane.textCursor()
+        #cursor.clearSelection()
+        #cursor.movePosition(QTextCursor.Start)
+        #cursor.movePosition(QTextCursor.Down, QTextCursor.MoveAnchor, linenum-1)
+        #cursor.movePosition(QTextCursor.Right, QTextCursor.MoveAnchor, col)
+        #cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor, len(s))  # create the selection
+        #self.textPane.setTextCursor(cursor)
     
     # FIXME shouldn't set document modified or add too undo stack
     def textFamily(self, family):
@@ -379,27 +384,74 @@ class MainWin(QMainWindow):
     def scannoCheck(self):
         """Run ppscannos."""
         
-        settings = QSettings(self)
-        ppscannos = settings.value('ppscannos')
-        assert(ppscannos)
-        scannodir = os.path.dirname(ppscannos)
+        #settings = QSettings(self)
+        #ppscannos = settings.value('ppscannos')
+        #assert(ppscannos)
+        scannodir = os.path.dirname(self.ppscannos)
         cmd = '/usr/bin/python3'
         scannoFile = self.comboScannoFile.currentText()
+        if not scannoFile:
+            scannoFile = self.defaultScannoFile
         scannoFile = scannodir + '/' + scannoFile
         #print('scannoFile:', scannoFile)
         src = self.fileName
         log = self.comboLogFile.currentText()
         if not log:
             log = './plog.txt'
-        subprocess.call([cmd, ppscannos, '-s' + scannoFile, '-o' + log, '-i' + src])
+        subprocess.call([cmd, self.ppscannos, '-s' + scannoFile, '-o' + log, '-i' + src])
         self.loadLog(log)
         self.logPane.setEnabled(True)
         
     def configure(self):
-        """Configure application settings."""
+        """Configure application settings by way of a dialog."""
         
         dlg = ConfigDialog()
         if dlg.exec():
+            self.setPPScannos(dlg.lineEditPPScannos.text())
+            self.setDefaultScannoFile(dlg.comboScannoFiles.currentText())
             settings = QSettings(QApplication.organizationName(), QApplication.applicationName())
-            settings.setValue('ppscannos', dlg.lineEditPPScannos.text())
-            settings.setValue('defaultScannoFile', dlg.comboScannoFiles.currentText())
+            settings.setValue('ppscannos', self.ppscannos)
+            settings.setValue('defaultScannoFile', self.defaultScannoFile)
+
+    def setPPScannos(self, s):
+        self.ppscannos = s
+        self.actionRun.setEnabled(self.ppscannos and os.path.exists(self.ppscannos))
+        #self.ppscannosChanged()
+        
+    def scannoFiles(self):
+        """Return list of .rc filenames (without path) that are in ppscannos directory."""
+        
+        if not self.ppscannos:
+            return []
+        return getRCFilesForDir(os.path.dirname(self.ppscannos))
+        
+    def setDefaultScannoFile(self, s):
+        self.defaultScannoFile = s
+        valid = False
+        if self.defaultScannoFile and self.ppscannos and os.path.exists(self.ppscannos):
+            if os.path.exists(os.path.dirname(self.ppscannos) + '/' + self.defaultScannoFile):
+                valid = True
+        self.actionRun.setEnabled(valid)
+        
+    def initializeSettings(self):
+        """Load persistent config settings."""
+        
+        settings = QSettings()
+        s = settings.value('ppscannos', type=str)
+        if not s:
+            # try the default
+            s = os.environ['HOME'] + '/ppscannos1/ppscannos1.py'
+        self.setPPScannos(s)
+        
+        s = settings.value('defaultScannoFile', type=str)
+        if (not s) and self.ppscannos:
+            # try the default
+            lst = getRCFilesForDir(os.path.dirname(self.ppscannos))
+            if len(lst):
+                # prefer 'regex.rc'; otherwise use the first one
+                s = lst[0]
+                for f in lst:
+                    if f == 'regex.rc':
+                        s = f
+                        break
+        self.setDefaultScannoFile(s)

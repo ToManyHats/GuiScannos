@@ -21,7 +21,7 @@
 
 import re
 
-from PyQt5.Qt import Qt, QFile, QFrame, QTextCursor, QTextEdit
+from PyQt5.Qt import pyqtSignal, Qt, QFile, QFrame, QTextCursor, QTextEdit
 
 
 class TextPane(QTextEdit):
@@ -40,10 +40,22 @@ class TextPane(QTextEdit):
         data = open(f, 'r').read()
         self.setPlainText(data)
         return True
-
+    
+    def setSelection(self, row, col, count):
+        """Select count characters, beginning at (row, col)."""
+        
+        cursor = self.textCursor()
+        cursor.clearSelection()
+        cursor.movePosition(QTextCursor.Start)
+        cursor.movePosition(QTextCursor.Down, QTextCursor.MoveAnchor, row-1)
+        cursor.movePosition(QTextCursor.Right, QTextCursor.MoveAnchor, col)
+        cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor, count)  # create the selection
+        self.setTextCursor(cursor)        
 
 class LogPane(TextPane):
     """Log viewer window."""
+    
+    lineMatchChanged = pyqtSignal()
     
     def __init__(self, parent=None):
         super(TextPane, self).__init__(parent)
@@ -51,6 +63,9 @@ class LogPane(TextPane):
         # pattern for finding line numbers in log file
         # match groups are linenum, col, and scanno
         self.pattern = re.compile(r"^\s\sLine\s#=(\d+)(?:-\d+)?\spos=(\d+)\smatch=(.+)\s*$")
+        self.currentMatch = None
+               
+        self.cursorPositionChanged.connect(self.updateMatch)
 
     def keyPressEvent(self, e):
         """Up and down arrows move cursor to next row that has line and column info and highlights it."""
@@ -80,3 +95,34 @@ class LogPane(TextPane):
                 cursor.movePosition(QTextCursor.Up)
                 cursor.movePosition(QTextCursor.StartOfLine)
             self.setTextCursor(cursor)
+
+    def updateMatch(self):
+        """Update the current pattern match."""
+        
+        cursor = self.textCursor()
+        cursor.select(QTextCursor.LineUnderCursor)
+        logline = cursor.selectedText()
+        self.currentMatch = self.pattern.search(logline)
+        if not self.currentMatch:
+            cursor.clearSelection()
+            cursor.movePosition(QTextCursor.StartOfLine)
+            self.setTextCursor(cursor)
+            return
+        self.setTextCursor(cursor)
+        self.lineMatchChanged.emit()
+        
+    def srcLineNum(self):
+        if not self.currentMatch:
+            return -1
+        return int(self.currentMatch.group(1))
+        
+    def srcColNum(self):
+        if not self.currentMatch:
+            return -1
+        colstr = self.currentMatch.group(2)
+        return int(colstr) - 1  # 1-based in ppscanno output
+    
+    def srcScanno(self):
+        if not self.currentMatch:
+            return None
+        return self.currentMatch.group(3)  # scanno match

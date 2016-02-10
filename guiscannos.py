@@ -33,7 +33,7 @@ from PyQt5.Qt import QApplication
 from mainwin import MainWin
 
 
-VERSION = '0.1_pre'
+VERSION = '0.1_pre2'
 
 
 if __name__ == '__main__':

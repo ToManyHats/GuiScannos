@@ -135,3 +135,13 @@ class ConfigDialog(QDialog):
             flist = dlg.selectedFiles()  # returns a list
             if len(flist):
                 self.lineEditPPScannos.setText(flist[0])
+
+    def ppscannosPath(self):
+        return self.lineEditPPScannos.text()
+    
+    def scannoFileNames(self):
+        lst = []
+        for i in range(self.comboScannoFiles.count()):
+            lst.append(self.comboScannoFiles.itemText(i))
+        return lst
+    
