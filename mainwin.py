@@ -240,16 +240,16 @@ class MainWin(QMainWindow):
         else:
             self.logPane.clear()
             self.logPane.setEnabled(False)
-        self.logBox.setTitle('No log file loaded.')
+            self.logBox.setTitle(self.tr('No log file loaded.'))
         return True
         
     def maybeSave(self):
         if not self.textPane.document().isModified():
             return True
 
-        ret = QMessageBox.warning(self, "Application",
-                "The document has been modified.\n"
-                "Do you want to save your changes?",
+        ret = QMessageBox.warning(self, 'GuiScannos',
+                'The document has been modified.\n'
+                'Do you want to save your changes?',
                 QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
 
         if ret == QMessageBox.Save:
@@ -271,7 +271,7 @@ class MainWin(QMainWindow):
             shownName = QFileInfo(fileName).fileName()
             self.actionRun.setEnabled(True)
 
-        self.setWindowTitle(self.tr("{}[*] - {}".format(shownName, "GUI Scannos")))
+        self.setWindowTitle(self.tr('{}[*] - {}'.format(shownName, 'GUI Scannos')))
         self.setWindowModified(False)
 
     def fileNew(self):
@@ -281,7 +281,7 @@ class MainWin(QMainWindow):
             self.setCurrentFileName()
 
     def fileOpen(self):
-        fn, _ = QFileDialog.getOpenFileName(self, "Open File...", None, "Text Files (*.txt);;All Files (*)")
+        fn, _ = QFileDialog.getOpenFileName(self, 'Open File...', None, 'Text Files (*.txt);;All Files (*)')
         if fn:
             self.loadSrc(fn)
             self.loadLog(None)  # clears logPane, logBox title, etc
@@ -290,92 +290,40 @@ class MainWin(QMainWindow):
         if not self.fileName:
             return self.fileSaveAs()
 
-        writer = QTextDocumentWriter(self.fileName)
-        success = writer.write(self.textPane.document())
-        if success:
-            self.textPane.document().setModified(False)
-
-        return success
+        return self.textpane.save(self.fileName)
 
     def fileSaveAs(self):
-        fn, _ = QFileDialog.getSaveFileName(self, "Save as...", None,
-                "text files (*.txt);;All Files (*)")
+        fn, _ = QFileDialog.getSaveFileName(self, "Save as...", None, "text files (*.txt);;All Files (*)")
 
         if not fn:
             return False
-
-        lfn = fn.lower()
-        if not lfn.endswith(('.txt')):
-            # The default.
-            fn += '.txt'
 
         self.setCurrentFileName(fn)
         return self.fileSave()
 
     def logLineMatchChanged(self):
-        #cursor = self.logPane.textCursor()
-        #cursor.select(QTextCursor.LineUnderCursor)
-        #logline = cursor.selectedText()
-        #match = self.logPane.pattern.search(logline)
-        #if not match:
-            #cursor.clearSelection()
-            #cursor.movePosition(QTextCursor.StartOfLine)
-            #self.logPane.setTextCursor(cursor)
-            ##print('no match')
-            #return
-        ##print('matched:', match.group(0))
-        #self.logPane.setTextCursor(cursor)
-        #numstr = match.group(1)
-        #linenum = int(numstr)
-        #colstr = match.group(2)
-        #col = int(colstr) - 1  # 1-based in ppscanno output
-        #s = match.group(3)  # scanno match
         linenum = self.logPane.srcLineNum()
         col = self.logPane.srcColNum()
         s = self.logPane.srcScanno()
         self.textPane.setSelection(linenum, col, len(s))
-        #cursor = self.textPane.textCursor()
-        #cursor.clearSelection()
-        #cursor.movePosition(QTextCursor.Start)
-        #cursor.movePosition(QTextCursor.Down, QTextCursor.MoveAnchor, linenum-1)
-        #cursor.movePosition(QTextCursor.Right, QTextCursor.MoveAnchor, col)
-        #cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor, len(s))  # create the selection
-        #self.textPane.setTextCursor(cursor)
     
-    # FIXME shouldn't set document modified or add too undo stack
     def textFamily(self, family):
-        """Set font family for text pane."""
+        """Set font family for text and log panes."""
         
-        fmt = QTextCharFormat()
-        fmt.setFontFamily(family)
-        cursor = self.textPane.textCursor()
-        self.textPane.selectAll()
         self.textPane.setFontFamily(family)
-        cursor2 = self.textPane.textCursor()
-        cursor2.clearSelection()
-        self.textPane.setTextCursor(cursor2)
-        self.textPane.setTextCursor(cursor)
+        self.logPane.setFontFamily(family)
 
     def textSize(self, pointSize):
-        """Set font size for text pane."""
+        """Set font size for text and log panes."""
         
-        pointSize = float(pointSize)
-        if pointSize > 0:
-            fmt = QTextCharFormat()
-            fmt.setFontPointSize(pointSize)
-            cursor = self.textPane.textCursor()
-            self.textPane.selectAll()
-            self.textPane.setFontPointSize(pointSize)
-            cursor2 = self.textPane.textCursor()
-            cursor2.clearSelection()
-            self.textPane.setTextCursor(cursor2)
-            self.textPane.setTextCursor(cursor)
+        self.textPane.setFontPointSize(pointSize)
+        self.logPane.setFontPointSize(pointSize)
 
     def clipboardDataChanged(self):
         self.actionPaste.setEnabled(len(QApplication.clipboard().text()) != 0)
 
     def about(self):
-        QMessageBox.about(self, "About", "GUI for ppscannos.")
+        QMessageBox.about(self, 'About', 'GUI for ppscannos.')
 
     def fontChanged(self, font):
         self.comboFont.setCurrentIndex(self.comboFont.findText(QFontInfo(font).family()))
@@ -384,16 +332,13 @@ class MainWin(QMainWindow):
     def scannoCheck(self):
         """Run ppscannos."""
         
-        #settings = QSettings(self)
-        #ppscannos = settings.value('ppscannos')
-        #assert(ppscannos)
         scannodir = os.path.dirname(self.ppscannos)
-        cmd = '/usr/bin/python3'
+        cmd = sys.executable
+        assert(cmd)
         scannoFile = self.comboScannoFile.currentText()
         if not scannoFile:
             scannoFile = self.defaultScannoFile
         scannoFile = scannodir + '/' + scannoFile
-        #print('scannoFile:', scannoFile)
         src = self.fileName
         log = self.comboLogFile.currentText()
         if not log:
@@ -416,7 +361,6 @@ class MainWin(QMainWindow):
     def setPPScannos(self, s):
         self.ppscannos = s
         self.actionRun.setEnabled(self.ppscannos and os.path.exists(self.ppscannos))
-        #self.ppscannosChanged()
         
     def scannoFiles(self):
         """Return list of .rc filenames (without path) that are in ppscannos directory."""
@@ -440,7 +384,8 @@ class MainWin(QMainWindow):
         s = settings.value('ppscannos', type=str)
         if not s:
             # try the default
-            s = os.environ['HOME'] + '/ppscannos1/ppscannos1.py'
+            s = os.path.expanduser('~') + '/ppscannos1/ppscannos1.py'
+            #s = os.environ['HOME'] + '/ppscannos1/ppscannos1.py'
         self.setPPScannos(s)
         
         s = settings.value('defaultScannoFile', type=str)

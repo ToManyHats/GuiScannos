@@ -42,4 +42,3 @@ something wrong at some point. A number of useful features are still missing.
 
 
 ## Known Issues
-Changing the font size marks the text file as modified.

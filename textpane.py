@@ -19,9 +19,9 @@
 ##########################################################################
 
 
-import re
+import os, re
 
-from PyQt5.Qt import pyqtSignal, Qt, QFile, QFrame, QTextCursor, QTextEdit
+from PyQt5.Qt import pyqtSignal, Qt, QFile, QFrame, QMessageBox, QTextCharFormat, QTextCursor, QTextDocumentWriter, QTextEdit
 
 
 class TextPane(QTextEdit):
@@ -35,12 +35,36 @@ class TextPane(QTextEdit):
         self.setLineWrapMode(QTextEdit.NoWrap)
         
     def load(self, f):
-        if not QFile.exists(f):
+        """Load file with name f. If succuss, return True. Otherwise, return False."""
+        if not os.path.isfile(f):
             return False
-        data = open(f, 'r').read()
+        self.encoding = None
+        try:
+            data = open(f, encoding='utf_8').read()
+            self.encoding = 'utf_8'
+        except:
+            try:
+                data = open(f, encoding='latin_1').read()
+            except:
+                pass
+            self.encoding = 'latin_1'
+        if not self.encoding:
+            s = 'Failed to open {}. File is not UTF-8 or Latin-1.'.format(f)
+            QMessageBox.critical(self, 'File Error', s)
+            return False
         self.setPlainText(data)
         return True
     
+    def save(self, f):
+        """Save file with name f. If succuss, return True. Otherwise, return False."""
+        if not f:
+            return False
+        writer = QTextDocumentWriter(self.f)
+        if not writer.write(self.document()):  # FIXME does this properly handle the encoding?
+            return False
+        self.document().setModified(False)
+        return True
+        
     def setSelection(self, row, col, count):
         """Select count characters, beginning at (row, col)."""
         
@@ -51,6 +75,45 @@ class TextPane(QTextEdit):
         cursor.movePosition(QTextCursor.Right, QTextCursor.MoveAnchor, col)
         cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor, count)  # create the selection
         self.setTextCursor(cursor)        
+
+    def setFontFamily(self, family):
+        """Override. Set font family."""
+        
+        undoState = self.isUndoRedoEnabled()
+        self.setUndoRedoEnabled(False)
+        mod = self.document().isModified()
+        fmt = QTextCharFormat()
+        fmt.setFontFamily(family)
+        cursor = self.textCursor()
+        self.selectAll()
+        super().setFontFamily(family)
+        cursor2 = self.textCursor()
+        cursor2.clearSelection()
+        self.setTextCursor(cursor2)
+        self.setTextCursor(cursor)
+        self.document().setModified(mod)
+        self.setUndoRedoEnabled(undoState)
+
+    def setFontPointSize(self, pointSize):
+        """Override. Set font size."""
+        
+        pointSize = float(pointSize)
+        if pointSize > 0:
+            undoState = self.isUndoRedoEnabled()
+            self.setUndoRedoEnabled(False)
+            mod = self.document().isModified()
+            fmt = QTextCharFormat()
+            fmt.setFontPointSize(pointSize)
+            cursor = self.textCursor()
+            self.selectAll()
+            super().setFontPointSize(pointSize)
+            cursor2 = self.textCursor()
+            cursor2.clearSelection()
+            self.setTextCursor(cursor2)
+            self.setTextCursor(cursor)
+            self.document().setModified(mod)
+            self.setUndoRedoEnabled(undoState)
+
 
 class LogPane(TextPane):
     """Log viewer window."""

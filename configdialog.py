@@ -95,7 +95,8 @@ class ConfigDialog(QDialog):
         settings = QSettings(self)
         ppscannos = settings.value('ppscannos', type=str)
         if not ppscannos:
-            ppscannos = os.environ['HOME']
+            #ppscannos = os.environ['HOME']
+            ppscannos = os.path.expanduser('~')
             ppscannos = ppscannos + '/ppscannos1/ppscannos1.py'
         self.lineEditPPScannos.setText(ppscannos)
         self.ppscannosChanged()
